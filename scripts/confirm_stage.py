@@ -41,6 +41,13 @@ def confirm_environment(workdir: Path, note: str) -> Path:
     return out_path
 
 
+def confirm_preflight(workdir: Path, note: str) -> Path:
+    out_path = workdir / "前置采集确认.json"
+    data = load_json_or_empty(out_path)
+    write_confirmation(out_path, data, "preflight_confirmed", note)
+    return out_path
+
+
 def confirm_project(workdir: Path, note: str) -> Path:
     out_path = workdir / "项目确认.json"
     data = load_json_or_empty(out_path)
@@ -158,6 +165,7 @@ def main() -> None:
         "--stage",
         required=True,
         choices=[
+            "preflight",
             "environment",
             "project",
             "business",
@@ -176,7 +184,9 @@ def main() -> None:
     args = parser.parse_args()
 
     workdir = Path(args.workdir)
-    if args.stage == "environment":
+    if args.stage == "preflight":
+        path = confirm_preflight(workdir, args.note)
+    elif args.stage == "environment":
         path = confirm_environment(workdir, args.note)
     elif args.stage == "project":
         path = confirm_project(workdir, args.note)

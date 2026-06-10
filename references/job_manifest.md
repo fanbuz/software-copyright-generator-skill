@@ -4,6 +4,17 @@
 
 ## 最小示例
 
+前置采集阶段只需要 `workdir`：
+
+```json
+{
+  "schema_version": "software-copyright-job.v1",
+  "workdir": "/path/to/output/软件著作权申请资料"
+}
+```
+
+用户提交表单后，再进入后续阶段：
+
 ```json
 {
   "schema_version": "software-copyright-job.v1",
@@ -24,10 +35,16 @@
 | 字段 | 必填 | 说明 |
 | --- | --- | --- |
 | `schema_version` | 是 | 固定为 `software-copyright-job.v1`。 |
-| `project_dir` | 是 | 待分析的软件项目目录。 |
 | `workdir` | 是 | 本次资料生成工作目录，默认结构仍为 `草稿/`、`截图/`、`正式资料/`。 |
-| `software_name` | 是 | 用户确认的软件全称，正式文件名、页眉和正文一致性检查以此为准。 |
+| `project_dir` | scan 及后续阶段必填 | 待分析的软件项目目录。 |
+| `software_name` | business 及后续阶段必填 | 用户确认的软件全称，正式文件名、页眉和正文一致性检查以此为准。 |
 | `version` | 否 | 申报版本号，未填时使用 `V1.0`。 |
+| `repository_mode` | 否 | 仓库模式，可取单体、前后分离、多仓库或其他，用于上层服务定位项目和解释源码范围。 |
+| `frontend_project_dir` | 否 | 前端仓库代码位置，前后分离项目可填。 |
+| `backend_project_dir` | 否 | 后端仓库代码位置，前后分离项目可填。 |
+| `publication_status` | 否 | 发表状态，申请表字段生成时用于提示待确认信息。 |
+| `completion_date` | 否 | 开发完成日期，申请表字段生成时用于提示待确认信息。 |
+| `copyright_owner` | 否 | 著作权人，申请表字段生成时用于提示待确认信息。 |
 | `analysis` | 否 | 已存在的 `analysis/project.json` 路径；不填时使用 `workdir/analysis/project.json`。 |
 | `model_context` | business 阶段可选 | 模型填写后的业务理解 JSON，用于生成 `业务理解.md/json`。缺失时阶段会返回 `requires_user_input=true`。 |
 | `business_context` | draft 阶段可选 | 已确认的 `业务理解.json` 路径；不填时使用 `workdir/草稿/业务理解.json`。 |
@@ -48,6 +65,7 @@ python3 scripts/run_stage.py --manifest job.json --stage scan
 
 支持阶段：
 
+- `preflight`：生成前置采集表和字段契约，停止并等待用户填写。
 - `scan`：生成 `analysis/project.json`。
 - `business`：生成业务理解证据、模板或确认稿。
 - `code-selection`：生成代码候选清单和选择 JSON。

@@ -18,12 +18,13 @@ from common import ensure_dir, read_json, write_json
 from extract_code_material import extract
 from generate_application_info import build_fields, require_confirmed_business, write_application_md
 from generate_business_context import build_evidence, load_model_context, normalize_model_context, write_context_md, write_evidence_md, write_model_template
+from generate_input_form import write_preflight_form
 from generate_manual_draft import write_manual
 from propose_code_selection import all_candidate_lines, build_candidates, selection_stats, write_selection_md
 from review_three_piece_package import review_package
 
 
-STAGES = {"scan", "business", "code-selection", "draft", "screenshots", "build", "review"}
+STAGES = {"preflight", "scan", "business", "code-selection", "draft", "screenshots", "build", "review"}
 
 
 class StageStop(Exception):
@@ -55,6 +56,12 @@ def load_manifest(path: Path) -> dict[str, Any]:
     if data.get("schema_version") != "software-copyright-job.v1":
         raise ValueError("manifest schema_version must be software-copyright-job.v1")
     return data
+
+
+def stage_preflight(manifest: dict[str, Any]) -> dict[str, Any]:
+    workdir = ensure_dir(require_path(manifest, "workdir"))
+    outputs = write_preflight_form(workdir)
+    raise StageStop("preflight input required", outputs)
 
 
 def stage_scan(manifest: dict[str, Any]) -> dict[str, Any]:
@@ -184,6 +191,7 @@ def stage_review(manifest: dict[str, Any]) -> dict[str, Any]:
 
 
 STAGE_RUNNERS: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
+    "preflight": stage_preflight,
     "scan": stage_scan,
     "business": stage_business,
     "code-selection": stage_code_selection,

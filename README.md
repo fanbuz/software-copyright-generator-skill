@@ -6,6 +6,7 @@
 
 - 扫描项目结构、语言、入口、路由、页面、组件、接口和源码统计。
 - 生成业务理解证据和模型填写模板，要求用户确认行业、目标用户、核心功能和手册模块。
+- 生成用户前置采集表，先收集软件全称、版本号、著作权人、日期、仓库模式、代码位置和截图方式。
 - 生成申请表信息 Markdown 草稿，并在正式生成前检查待确认字段。
 - 生成源代码候选清单，要求模型选择理由和用户确认，再按页数规则输出全部源码或前后 30 页。
 - 生成段落化用户手册草稿，保留截图预留或整理用户提供截图。
@@ -39,7 +40,35 @@ software-copyright-generator
 
 ## 最小使用路径
 
-在待处理项目所在目录运行：
+收到“做一下软著生成”这类请求时，先生成前置采集表并交给用户填写：
+
+```bash
+python3 ~/.codex/skills/software-copyright-generator/scripts/generate_input_form.py --out 软件著作权申请资料/前置采集表.md
+```
+
+表单开头为：
+
+```text
+【请用户输入】
+
+软件全称：
+版本号：
+著作权人：
+开发完成日期：
+发表状态：
+仓库模式：
+前端仓库代码位置：
+后端仓库代码位置：
+...
+```
+
+用户提交后记录前置采集门禁：
+
+```bash
+python3 ~/.codex/skills/software-copyright-generator/scripts/confirm_stage.py --workdir 软件著作权申请资料 --stage preflight --note "用户已提交前置采集表"
+```
+
+之后在待处理项目所在目录运行：
 
 ```bash
 python3 ~/.codex/skills/software-copyright-generator/scripts/check_environment.py --out-dir 软件著作权申请资料
@@ -70,6 +99,7 @@ python3 ~/.codex/skills/software-copyright-generator/scripts/build_docx_from_md.
 上层服务可以用 manifest 调用单阶段：
 
 ```bash
+python3 scripts/run_stage.py --manifest job.json --stage preflight
 python3 scripts/run_stage.py --manifest job.json --stage scan
 ```
 

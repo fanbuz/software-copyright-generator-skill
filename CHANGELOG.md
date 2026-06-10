@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- 增加前置采集表入口，用户提出生成软著材料时先收集登记信息、仓库模式、代码位置、运行截图和输出配置。
+- 增加 `scripts/generate_input_form.py`，支持输出 Markdown 表单和 JSON 字段契约。
+- `scripts/run_stage.py` 增加 `preflight` 阶段，服务化调用可在工作目录生成前置采集表并等待用户输入。
+- `scripts/confirm_stage.py` 增加 `preflight` 门禁记录。
+
 ## v0.1.0
 
 初版发布基线，包含：
