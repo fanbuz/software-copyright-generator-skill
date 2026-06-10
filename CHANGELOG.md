@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- 增加确认模式与偏好复用：新增 `scripts/confirmation_preferences.py`，支持 interactive 逐项确认与 auto 按默认直走两种模式；auto 模式用 `--apply-defaults` 自动补齐可默认门禁，登记数据类门禁仍需用户提供。
+- 流程中的用户选择（确认模式、截图方式、服务地址等）自动保存到 `用户偏好.json`，下次运行可通过 `--show` 查看并沿用。
+- job manifest 增加 `confirmation_mode` 字段；build 阶段在 auto 模式下先补齐可默认门禁并输出 `auto_confirm` 报告。
+- 修复 `parse_screenshot_method` 把 `user-supplied` 误判为 `computer-use` 的关键词匹配问题；标准取值直接采用。
 - 增加截图就绪交互点：`capture_screenshots.py --check-only` 探测 Web 服务可达性与 Playwright 可用性，服务未启动时提示用户先启动 Web 服务。
 - `confirm_stage.py` 新增 `screenshot-ready` 门禁，实际探测访问地址可达后才记录确认。
 - `run_stage.py` 的 `screenshots` 阶段支持浏览器自动截图：服务不可达时写入 `截图/截图就绪检查.json` 并返回 `requires_user_input=true`；同时支持 `skip` 方式直接返回预留说明。

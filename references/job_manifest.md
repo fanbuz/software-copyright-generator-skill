@@ -73,6 +73,7 @@
 | `final_dir` | review 阶段可选 | 正式资料目录；不填时使用 `workdir/正式资料`。 |
 | `forbidden_terms` | 否 | 最终复核需要检查的禁用词、旧名称或不应出现的模块词。 |
 | `skip_preview` | 否 | build 阶段是否跳过本机 DOCX 预览检查。 |
+| `confirmation_mode` | 否 | 确认模式。`auto` 表示用户已授权按默认直走：build 阶段先按默认与 `用户偏好.json` 自动补齐可默认门禁，再检查剩余门禁；登记数据类门禁仍需用户提供。缺省为 `interactive` 逐项确认。 |
 
 ## 阶段入口
 
@@ -90,7 +91,7 @@ python3 scripts/run_stage.py --manifest job.json --stage scan
 - `code-selection`：生成代码候选清单和选择 JSON。
 - `draft`：生成代码、申请表、操作手册 Markdown 草稿。
 - `screenshots`：整理用户提供截图，或在 Web 服务可达时浏览器自动截图并生成截图清单；服务未启动时写入 `截图/截图就绪检查.json` 并返回 `requires_user_input=true`，等待用户启动 Web 服务后重试（自动截图仅支持 Web 端服务）。
-- `build`：在门禁齐备后生成正式 Word/TXT。
+- `build`：在门禁齐备后生成正式 Word/TXT；`confirmation_mode=auto` 时先自动补齐可默认门禁，输出包含 `auto_confirm` 报告。
 - `review`：复核正式三件套并输出 JSON。
 
 ## 输出约定

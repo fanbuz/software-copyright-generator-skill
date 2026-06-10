@@ -14,6 +14,7 @@ from typing import Any, Callable
 from analyze_project import analyze
 from build_docx_from_md import build_all, confirmation_issues
 from capture_screenshots import capture_browser_screenshots, check_readiness, collect_manual_screenshots
+from confirmation_preferences import apply_defaults, set_confirmation_mode
 from common import ensure_dir, read_json, write_json
 from extract_code_material import extract
 from generate_application_info import build_fields, require_confirmed_business, write_application_md
@@ -200,11 +201,19 @@ def stage_screenshots(manifest: dict[str, Any]) -> dict[str, Any]:
 
 def stage_build(manifest: dict[str, Any]) -> dict[str, Any]:
     workdir = ensure_dir(require_path(manifest, "workdir"))
+    auto_report: dict[str, Any] | None = None
+    if str(manifest.get("confirmation_mode") or "").lower() == "auto":
+        # 上层服务声明用户已选择默认模式：先按默认与已保存偏好补齐可默认门禁。
+        preferences = set_confirmation_mode(workdir, "auto", "manifest 指定默认模式")
+        auto_report = apply_defaults(workdir, preferences)
     issues = confirmation_issues(workdir)
     if issues:
         raise StageStop("formal build confirmation gates are incomplete", {"issues": "\n".join(issues)})
     result = build_all(workdir, require_text(manifest, "software_name"), str(manifest.get("version") or "V1.0"), bool(manifest.get("skip_preview", True)))
-    return {"report": result["report"], "outputs": result["outputs"]}
+    payload: dict[str, Any] = {"report": result["report"], "outputs": result["outputs"]}
+    if auto_report is not None:
+        payload["auto_confirm"] = auto_report
+    return payload
 
 
 def stage_review(manifest: dict[str, Any]) -> dict[str, Any]:

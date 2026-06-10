@@ -252,3 +252,38 @@ def safe_filename(value: str) -> str:
 def ensure_dir(path: Path) -> Path:
     path.mkdir(parents=True, exist_ok=True)
     return path
+
+
+PREFERENCES_FILENAME = "用户偏好.json"
+PREFERENCES_SCHEMA_VERSION = "user-preferences.v1"
+
+
+def load_user_preferences(workdir: Path) -> dict[str, Any]:
+    """Load reusable workflow preferences; defaults to interactive confirmations."""
+    path = workdir / PREFERENCES_FILENAME
+    data: dict[str, Any] = {}
+    if path.exists():
+        loaded = read_json(path)
+        if isinstance(loaded, dict):
+            data = loaded
+    data.setdefault("schema_version", PREFERENCES_SCHEMA_VERSION)
+    data.setdefault("confirmation_mode", "interactive")
+    data.setdefault("choices", {})
+    return data
+
+
+def save_user_preferences(workdir: Path, data: dict[str, Any]) -> Path:
+    from datetime import datetime, timezone
+
+    path = workdir / PREFERENCES_FILENAME
+    data["schema_version"] = PREFERENCES_SCHEMA_VERSION
+    data["updated_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    write_json(path, data)
+    return path
+
+
+def record_preference_choice(workdir: Path, key: str, value: Any) -> Path:
+    """Persist one workflow choice so the next run can offer it as the default."""
+    data = load_user_preferences(workdir)
+    data["choices"][key] = value
+    return save_user_preferences(workdir, data)

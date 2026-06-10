@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from capture_screenshots import probe_service
-from common import read_json, write_json
+from common import read_json, record_preference_choice, write_json
 
 
 def timestamp() -> str:
@@ -88,16 +88,22 @@ def confirm_code_selection(workdir: Path, note: str) -> Path:
     return path
 
 
+SCREENSHOT_METHODS = ("chrome-devtools", "computer-use", "user-supplied", "skip")
+
+
 def parse_screenshot_method(method: str, note: str) -> str:
+    # 标准取值直接采用，模糊匹配只用于自由文本备注。
+    if method in SCREENSHOT_METHODS:
+        return method
     value = (method or note or "").lower()
     if any(key in value for key in ("skip", "no-screenshot", "none", "不截图", "跳过", "暂不", "先不", "不要截图", "无需截图")):
         return "skip"
     if any(key in value for key in ("chrome", "devtools", "mcp")):
         return "chrome-devtools"
-    if any(key in value for key in ("computer", "use", "电脑", "桌面")):
-        return "computer-use"
     if any(key in value for key in ("user", "manual", "self", "手动", "自己", "用户")):
         return "user-supplied"
+    if any(key in value for key in ("computer", "电脑", "桌面")):
+        return "computer-use"
     raise SystemExit(
         "STOP_FOR_USER\n"
         "NEXT_ACTION: 请明确截图方式：chrome-devtools、computer-use、user-supplied 或 skip。"
@@ -110,6 +116,8 @@ def confirm_screenshot_method(workdir: Path, note: str, method: str) -> Path:
     data = load_json_or_empty(out_path)
     data["screenshot_method"] = selected
     write_confirmation(out_path, data, "screenshot_method_confirmed", note)
+    # 保存为用户偏好，下次运行可直接沿用该截图方式。
+    record_preference_choice(workdir, "screenshot_method", selected)
     return out_path
 
 
@@ -137,6 +145,8 @@ def confirm_screenshot_ready(workdir: Path, note: str, base_url: str) -> Path:
     data["base_url"] = base_url
     data["service_detail"] = service
     write_confirmation(out_path, data, "screenshot_service_ready", note)
+    # 保存访问地址偏好，下次运行可直接提示沿用。
+    record_preference_choice(workdir, "screenshot_base_url", base_url)
     return out_path
 
 
