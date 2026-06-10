@@ -69,12 +69,12 @@ def application_software_name(draft_dir: Path) -> str:
     return name
 
 
-def write_application_txt(draft_dir: Path, out_dir: Path) -> tuple[Path | None, list[str]]:
+def write_application_txt(draft_dir: Path, out_dir: Path, file_prefix: str) -> tuple[Path | None, list[str]]:
     md_path = draft_dir / "申请表信息.md"
     if not md_path.exists():
         return None, ["缺少草稿/申请表信息.md"]
     fields, warnings = parse_application_lines(md_path)
-    out_path = out_dir / "申请表信息.txt"
+    out_path = out_dir / f"{file_prefix}申请表信息.txt"
     out_path.write_text("\n".join(fields) + "\n", encoding="utf-8")
     return out_path, warnings
 
@@ -121,25 +121,36 @@ def confirmation_issues(workdir: Path) -> list[str]:
 
 
 def parse_code_pages(md_path: Path) -> list[tuple[int, list[str]]]:
+    """Parse paginated code drafts.
+
+    围栏感知：记录打开围栏的反引号长度，只有不短于该长度的纯反引号行才关闭围栏，
+    源码内容中的三反引号行不会破坏分页；页标题只在围栏外识别。
+    """
     pages: list[tuple[int, list[str]]] = []
     current_no: int | None = None
     current_lines: list[str] = []
-    in_fence = False
+    fence_len = 0
 
     for raw in md_path.read_text(encoding="utf-8").splitlines():
-        page_match = re.match(r"^##\s+第\s*(\d+)\s*页", raw.strip())
+        stripped = raw.strip()
+        if fence_len:
+            if re.fullmatch(rf"`{{{fence_len},}}", stripped):
+                fence_len = 0
+                continue
+            if current_no is not None:
+                current_lines.append(raw)
+            continue
+        page_match = re.match(r"^##\s+第\s*(\d+)\s*页", stripped)
         if page_match:
             if current_no is not None:
                 pages.append((current_no, current_lines))
             current_no = int(page_match.group(1))
             current_lines = []
-            in_fence = False
             continue
-        if raw.strip().startswith("```"):
-            in_fence = not in_fence
+        fence_match = re.match(r"^(`{3,})(?:text)?\s*$", stripped)
+        if fence_match:
+            fence_len = len(fence_match.group(1))
             continue
-        if current_no is not None and in_fence:
-            current_lines.append(raw)
 
     if current_no is not None:
         pages.append((current_no, current_lines))
@@ -243,11 +254,26 @@ def add_page_field(paragraph: Any) -> None:
         set_run_font(run, "SimSun", 8)
 
 
+def set_page_number_start(section: Any, start: int) -> None:
+    """Make the PAGE field continue from the material's real first page number."""
+    sect_pr = section._sectPr
+    pg_num_type = sect_pr.find(qn("w:pgNumType"))
+    if pg_num_type is None:
+        pg_num_type = OxmlElement("w:pgNumType")
+        cols = sect_pr.find(qn("w:cols"))
+        if cols is not None:
+            cols.addprevious(pg_num_type)
+        else:
+            sect_pr.append(pg_num_type)
+    pg_num_type.set(qn("w:start"), str(start))
+
+
 def set_code_header(document: Any, software_name: str, version: str) -> None:
     section = document.sections[0]
     section.header.is_linked_to_previous = False
     header = section.header
-    header.paragraphs[0].text = "" if header.paragraphs else None
+    placeholder = header.paragraphs[0]
+    placeholder.text = ""
 
     # Build a two-column header: software name on the left, page number on the right.
     table = header.add_table(rows=1, cols=2, width=Cm(17.5))
@@ -286,6 +312,13 @@ def set_code_header(document: Any, software_name: str, version: str) -> None:
             tc_borders.append(border)
         tc_pr.append(tc_borders)
 
+    # Move the table above the placeholder paragraph and collapse the leftover blank line.
+    placeholder._p.addprevious(table._tbl)
+    placeholder.paragraph_format.space_before = Pt(0)
+    placeholder.paragraph_format.space_after = Pt(0)
+    placeholder.paragraph_format.line_spacing_rule = WD_LINE_SPACING.EXACTLY
+    placeholder.paragraph_format.line_spacing = Pt(1)
+
 
 def build_code_docx_python(md_path: Path, out_path: Path, software_name: str, version: str) -> None:
     pages = parse_code_pages(md_path)
@@ -297,6 +330,8 @@ def build_code_docx_python(md_path: Path, out_path: Path, software_name: str, ve
     set_normal_font(document, "Consolas", 7.2)
     set_style_black(document)
     set_code_header(document, software_name, version)
+    # 后30页材料的页码应从真实起始页继续编号，保持页码连续。
+    set_page_number_start(document.sections[0], pages[0][0])
 
     for index, (page_no, lines) in enumerate(pages):
         for line in lines:
@@ -387,7 +422,7 @@ def header_xml(header_text: str) -> str:
 </w:hdr>"""
 
 
-def minimal_docx(out_path: Path, body_xml: str, header_text: str | None = None) -> None:
+def minimal_docx(out_path: Path, body_xml: str, header_text: str | None = None, start_page: int | None = None) -> None:
     content_types = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
   <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
@@ -422,6 +457,7 @@ def minimal_docx(out_path: Path, body_xml: str, header_text: str | None = None) 
         {'<w:headerReference w:type="default" r:id="rIdHeader1"/>' if header_text else ''}
         <w:pgSz w:w="11906" w:h="16838"/>
       <w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1418" w:header="283" w:footer="283" w:gutter="0"/>
+      {f'<w:pgNumType w:start="{start_page}"/>' if start_page else ''}
     </w:sectPr>
   </w:body>
 </w:document>"""
@@ -550,7 +586,7 @@ def build_code_docx_ooxml(md_path: Path, out_path: Path, software_name: str, ver
             body.append(paragraph_xml(line if line else " ", font="Consolas", size_half_points=14, line_twips=240))
         if index != len(pages) - 1:
             body.append(page_break_xml())
-    minimal_docx(out_path, "\n".join(body), header_text=f"{software_name} {version}")
+    minimal_docx(out_path, "\n".join(body), header_text=f"{software_name} {version}", start_page=pages[0][0])
 
 
 def add_markdown_table(document: Any, rows: list[list[str]]) -> None:
@@ -750,15 +786,17 @@ def build_all(workdir: Path, software_name: str, version: str, skip_preview: boo
         if not screenshots:
             warnings.append("操作手册截图清单为空；操作手册应保留截图预留位置")
 
-    app_txt, app_warnings = write_application_txt(draft_dir, final_dir)
+    # 正式文件统一命名为「软件全称-版本号-材料名」，便于三件套复核按名称与版本匹配。
+    file_prefix = f"{safe_name}-{safe_filename(final_version)}-"
+    app_txt, app_warnings = write_application_txt(draft_dir, final_dir, file_prefix)
     if app_txt:
         outputs.append(app_txt)
     warnings.extend(app_warnings)
 
     code_specs = [
-        ("代码-前30页.md", f"{safe_name}-代码(前30页).docx"),
-        ("代码-后30页.md", f"{safe_name}-代码(后30页).docx"),
-        ("代码-全部.md", f"{safe_name}-代码(全部).docx"),
+        ("代码-前30页.md", f"{file_prefix}代码(前30页).docx"),
+        ("代码-后30页.md", f"{file_prefix}代码(后30页).docx"),
+        ("代码-全部.md", f"{file_prefix}代码(全部).docx"),
     ]
     for md_name, docx_name in code_specs:
         md_path = draft_dir / md_name
@@ -769,7 +807,7 @@ def build_all(workdir: Path, software_name: str, version: str, skip_preview: boo
 
     manual_md = draft_dir / "操作手册.md"
     if manual_md.exists():
-        manual_out = final_dir / f"{safe_name}_操作手册.docx"
+        manual_out = final_dir / f"{file_prefix}操作手册.docx"
         manual_source = manual_md
         tmp_manual: Path | None = None
         if app_name and app_name != software_name:

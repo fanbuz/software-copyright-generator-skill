@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import unicodedata
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +13,12 @@ from common import COPYRIGHT_CODE_EXTS, FRONTEND_EXTS, ensure_dir, is_known_conf
 
 LINES_PER_PAGE = 50
 SPLIT_THRESHOLD_PAGES = 60
+# Word 代码版面（A4、Consolas 小字号）单行可容纳的显示列数；超宽行按此宽度换行，
+# 保证 Markdown 分页与正式 Word 每页实际行数一致。中文等全角字符按 2 列计。
+MAX_LINE_DISPLAY_WIDTH = 100
+# 连续空行最多保留数量，避免空行凑页数。
+MAX_CONSECUTIVE_BLANK_LINES = 2
+CODE_FENCE = "````"
 
 
 def category_weight(path: Path, project: Path) -> tuple[int, str]:
@@ -49,27 +56,74 @@ def category_weight(path: Path, project: Path) -> tuple[int, str]:
     return priority, r
 
 
-def should_skip_file(path: Path) -> bool:
+def skip_reason(path: Path) -> str | None:
     if path.suffix.lower() not in COPYRIGHT_CODE_EXTS:
-        return True
+        return "扩展名不在源码材料范围"
     if is_known_config_file(path):
-        return True
+        return "常见工程配置文件"
     if looks_binary(path):
-        return True
+        return "疑似二进制文件"
     try:
         size = path.stat().st_size
     except OSError:
-        return True
-    if size <= 0 or size > 800_000:
-        return True
+        return "文件不可读取"
+    if size <= 0:
+        return "空文件"
+    if size > 800_000:
+        return "文件超过 800KB"
     try:
         sample = read_text(path, limit=20_000)
     except Exception:
-        return True
+        return "文件解码失败"
     lines = sample.splitlines()
     if any(len(line) > 3000 for line in lines[:80]):
-        return True
-    return False
+        return "存在超长行，疑似压缩或生成代码"
+    return None
+
+
+def display_width(text: str) -> int:
+    return sum(2 if unicodedata.east_asian_width(ch) in ("F", "W") else 1 for ch in text)
+
+
+def wrap_line(line: str, max_width: int) -> list[str]:
+    """Split a long source line by display width so Word pages keep the planned line count."""
+    if max_width <= 0 or display_width(line) <= max_width:
+        return [line]
+    parts: list[str] = []
+    current: list[str] = []
+    width = 0
+    for ch in line:
+        w = 2 if unicodedata.east_asian_width(ch) in ("F", "W") else 1
+        if width + w > max_width and current:
+            parts.append("".join(current))
+            current = []
+            width = 0
+        current.append(ch)
+        width += w
+    if current:
+        parts.append("".join(current))
+    return parts
+
+
+def clean_material_lines(source_lines: list[str], max_width: int) -> list[str]:
+    """Normalize selected source lines for copyright material.
+
+    保留源码文本内容本身：仅清理行尾空格、限制连续空行数量、把制表符展开为空格，
+    并将超过版面宽度的长行按显示宽度换行。
+    """
+    cleaned: list[str] = []
+    blank_run = 0
+    for raw in source_lines:
+        line = raw.replace("\t", "    ").rstrip()
+        if not line:
+            blank_run += 1
+            if blank_run > MAX_CONSECUTIVE_BLANK_LINES:
+                continue
+            cleaned.append("")
+            continue
+        blank_run = 0
+        cleaned.extend(wrap_line(line, max_width))
+    return cleaned
 
 
 def selected_line_estimate(item: dict[str, Any]) -> int:
@@ -107,7 +161,18 @@ def available_pages_from_selection(selection_path: Path | None, lines_per_page: 
 
 
 def marker_for(path: Path, project: Path) -> str:
-    return f"// File: {rel(path, project)}"
+    """Build a traceability marker using the comment style of the file's language."""
+    r = rel(path, project)
+    suffix = path.suffix.lower()
+    if suffix in {".html", ".vue", ".astro", ".svelte", ".md"}:
+        return f"<!-- File: {r} -->"
+    if suffix in {".py", ".sh", ".rb"}:
+        return f"# File: {r}"
+    if suffix == ".sql":
+        return f"-- File: {r}"
+    if suffix == ".css":
+        return f"/* File: {r} */"
+    return f"// File: {r}"
 
 
 def load_selected_files(project: Path, selection_path: Path | None) -> list[dict[str, Any]]:
@@ -146,10 +211,11 @@ def load_selected_files(project: Path, selection_path: Path | None) -> list[dict
     return selected
 
 
-def collect_code_lines(project: Path, selection_path: Path | None) -> tuple[list[str], list[dict[str, Any]]]:
+def collect_code_lines(project: Path, selection_path: Path | None) -> tuple[list[str], list[dict[str, Any]], list[dict[str, str]]]:
     selected_items = load_selected_files(project, selection_path)
     all_lines: list[str] = []
     manifest_files: list[dict[str, Any]] = []
+    skipped_files: list[dict[str, str]] = []
 
     for item in selected_items:
         path = (project / item["path"]).resolve()
@@ -157,16 +223,19 @@ def collect_code_lines(project: Path, selection_path: Path | None) -> tuple[list
             path.relative_to(project.resolve())
         except ValueError:
             raise SystemExit(f"Selected file is outside project: {path}")
-        if should_skip_file(path):
+        reason = skip_reason(path)
+        if reason:
+            skipped_files.append({"path": str(item["path"]), "reason": reason})
             continue
         text = read_text(path)
         source_lines = text.splitlines()
         selected_line_start, selected_line_end = selected_range(item, len(source_lines))
         selected_lines = source_lines[selected_line_start - 1 : selected_line_end]
+        material_lines = clean_material_lines(selected_lines, MAX_LINE_DISPLAY_WIDTH)
         start = len(all_lines) + 1
         marker = marker_for(path, project)
         all_lines.append(marker)
-        all_lines.extend(selected_lines)
+        all_lines.extend(material_lines)
         all_lines.append("")
         end = len(all_lines)
         manifest_files.append(
@@ -180,7 +249,7 @@ def collect_code_lines(project: Path, selection_path: Path | None) -> tuple[list
                 "material_line_end": end,
             }
         )
-    return all_lines, manifest_files
+    return all_lines, manifest_files, skipped_files
 
 
 def paginate(lines: list[str], lines_per_page: int) -> list[list[str]]:
@@ -188,11 +257,12 @@ def paginate(lines: list[str], lines_per_page: int) -> list[list[str]]:
 
 
 def write_pages_md(path: Path, title: str, software_name: str, version: str, pages: list[tuple[int, list[str]]]) -> None:
+    # 使用四反引号围栏，避免源码中出现的三反引号行破坏分页结构。
     chunks = [f"# {title}", "", f"软件名称：{software_name}", f"版本号：{version}", ""]
     for page_no, page_lines in pages:
-        chunks.extend([f"## 第 {page_no} 页", "", "```text"])
+        chunks.extend([f"## 第 {page_no} 页", "", f"{CODE_FENCE}text"])
         chunks.extend(page_lines)
-        chunks.extend(["```", ""])
+        chunks.extend([CODE_FENCE, ""])
     path.write_text("\n".join(chunks), encoding="utf-8")
 
 
@@ -224,14 +294,21 @@ def write_manifest_md(path: Path, manifest: dict[str, Any]) -> None:
             f"{item['selected_line_count']} | "
             f"{item['material_line_start']}-{item['material_line_end']} |"
         )
+    skipped = manifest.get("skipped_files") or []
+    if skipped:
+        lines.extend(["", "## 已选择但被跳过的文件", ""])
+        lines.extend(f"- `{item['path']}`：{item['reason']}" for item in skipped)
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def extract(project: Path, out_dir: Path, software_name: str, version: str, lines_per_page: int, selection_path: Path | None) -> dict[str, Any]:
     ensure_dir(out_dir)
-    code_lines, files = collect_code_lines(project, selection_path)
+    code_lines, files, skipped_files = collect_code_lines(project, selection_path)
     if not code_lines:
-        raise SystemExit("No selected frontend source code files found for extraction.")
+        raise SystemExit(
+            "未能从已确认的选择中抽取到源码：所有已选文件均被跳过或为空。"
+            "请检查 草稿/代码文件选择.json 与文件本身。"
+        )
 
     pages = paginate(code_lines, lines_per_page)
     total_pages = len(pages)
@@ -275,6 +352,7 @@ def extract(project: Path, out_dir: Path, software_name: str, version: str, line
         "source_line_count": sum(item["source_line_count"] for item in files),
         "selected_source_line_count": sum(item["selected_line_count"] for item in files),
         "lines_per_page": lines_per_page,
+        "max_line_display_width": MAX_LINE_DISPLAY_WIDTH,
         "total_pages": total_pages,
         "target_pages": SPLIT_THRESHOLD_PAGES,
         "available_candidate_line_count": available_lines,
@@ -284,6 +362,7 @@ def extract(project: Path, out_dir: Path, software_name: str, version: str, line
         "selection_file": str(selection_path) if selection_path else None,
         "outputs": outputs,
         "files": files,
+        "skipped_files": skipped_files,
         "safe_software_filename": safe_filename(software_name),
     }
     write_json(out_dir / "代码提取清单.json", manifest)
@@ -318,6 +397,10 @@ def main() -> None:
     print(f"Mode: {manifest['mode']}")
     print(f"Total pages: {manifest['total_pages']}")
     print(f"Outputs: {', '.join(manifest['outputs'])}")
+    if manifest["skipped_files"]:
+        print("Warnings: 以下已选文件被跳过，请确认是否影响材料范围：")
+        for item in manifest["skipped_files"]:
+            print(f"- {item['path']}：{item['reason']}")
 
 
 if __name__ == "__main__":

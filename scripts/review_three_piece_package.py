@@ -41,6 +41,24 @@ def count_term(text: str, term: str) -> int:
     return text.count(term)
 
 
+def inspect_txt(path: Path, terms: list[str]) -> dict:
+    body = path.read_text(encoding="utf-8", errors="replace")
+    combined = "\n".join([path.name, body])
+    return {
+        "path": str(path),
+        "exists": path.exists(),
+        "size": path.stat().st_size,
+        "paragraphs": sum(1 for line in body.splitlines() if line.strip()),
+        "tables": 0,
+        "rows_first_table": 0,
+        "cols_first_row": 0,
+        "images": 0,
+        "term_counts": {term: count_term(combined, term) for term in terms},
+        "body_term_counts": {term: count_term(body, term) for term in terms},
+        "header_footer_term_counts": {term: 0 for term in terms},
+    }
+
+
 def inspect_docx(path: Path, terms: list[str]) -> dict:
     if Document is None:
         return {
@@ -76,11 +94,23 @@ def inspect_docx(path: Path, terms: list[str]) -> dict:
     }
 
 
+def collect_files(directory: Path, patterns: list[str], version: str) -> list[Path]:
+    """Match by keyword globs, then require the version anywhere in the filename."""
+    found: set[Path] = set()
+    for pattern in patterns:
+        found.update(directory.glob(pattern))
+    return sorted(p for p in found if version in p.name)
+
+
 def review_package(directory: Path, software_name: str, version: str, forbidden: list[str]) -> dict:
     files = {
-        "info": sorted(directory.glob(f"*信息采集表*{version}*.docx")),
-        "manual": sorted(directory.glob(f"*用户手册*{version}*.docx")) + sorted(directory.glob(f"*操作手册*{version}*.docx")),
-        "source": sorted(directory.glob(f"*源代码*{version}*.docx")) + sorted(directory.glob(f"*代码*{version}*.docx")),
+        "info": collect_files(
+            directory,
+            ["*信息采集表*.docx", "*申请表信息*.docx", "*信息采集表*.txt", "*申请表信息*.txt"],
+            version,
+        ),
+        "manual": collect_files(directory, ["*用户手册*.docx", "*操作手册*.docx"], version),
+        "source": collect_files(directory, ["*源代码*.docx", "*代码*.docx"], version),
     }
     terms = [software_name, version, *forbidden]
     result = {"dir": str(directory), "files": {}, "missing": [], "warnings": []}
@@ -88,7 +118,14 @@ def review_package(directory: Path, software_name: str, version: str, forbidden:
         if not matches:
             result["missing"].append(kind)
             continue
-        info = inspect_docx(matches[0], terms)
+        # 同类材料优先复核 DOCX；信息件仅有 TXT 时按文本复核并提示。
+        docx_matches = [p for p in matches if p.suffix.lower() == ".docx"]
+        target = docx_matches[0] if docx_matches else matches[0]
+        if target.suffix.lower() == ".txt":
+            info = inspect_txt(target, terms)
+            result["warnings"].append(f"{kind}: 仅找到 TXT 文本材料；正式信息采集表 DOCX 需通过模板套打生成")
+        else:
+            info = inspect_docx(target, terms)
         result["files"][kind] = info
         if info.get("warning"):
             result["warnings"].append(f"{kind}: {info['warning']}")
