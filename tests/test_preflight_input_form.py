@@ -60,6 +60,51 @@ class PreflightInputFormTests(unittest.TestCase):
         self.assertIn("software_name", required_keys)
         self.assertIn("repository_mode", required_keys)
 
+    def test_cli_json_covers_common_project_and_material_scenarios(self) -> None:
+        completed = run_script("generate_input_form.py", "--json")
+
+        self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+        payload = json.loads(completed.stdout)
+        self.assertIn("scenario_guidance", payload)
+        section_titles = {section["title"] for section in payload["sections"]}
+        self.assertTrue(
+            {
+                "一、登记与权属",
+                "二、开发与发表",
+                "三、项目形态与仓库",
+                "四、业务范围与用户手册",
+                "五、源码材料",
+                "六、运行与截图",
+                "七、模板与输出",
+                "八、正式资料检查",
+            }.issubset(section_titles)
+        )
+        fields = [field for section in payload["sections"] for field in section["fields"]]
+        field_keys = {field["key"] for field in fields}
+        expected_keys = {
+            "development_mode",
+            "software_category",
+            "hardware_environment",
+            "runtime_environment",
+            "repository_snapshot",
+            "mobile_project_dir",
+            "mini_program_project_dir",
+            "desktop_project_dir",
+            "business_modules",
+            "user_roles",
+            "core_workflows",
+            "source_material_strategy",
+            "page_rule",
+            "screenshot_pages",
+            "template_mode",
+            "output_formats",
+            "cleanup_check_terms",
+        }
+        self.assertTrue(expected_keys.issubset(field_keys))
+        conditional_fields = {field["key"] for field in fields if field.get("applies_when")}
+        self.assertIn("mobile_project_dir", conditional_fields)
+        self.assertIn("template_mode", field_keys)
+
     def test_run_stage_preflight_writes_form_to_workdir(self) -> None:
         from tempfile import TemporaryDirectory
 

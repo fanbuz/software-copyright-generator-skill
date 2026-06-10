@@ -45,6 +45,23 @@
 | `publication_status` | 否 | 发表状态，申请表字段生成时用于提示待确认信息。 |
 | `completion_date` | 否 | 开发完成日期，申请表字段生成时用于提示待确认信息。 |
 | `copyright_owner` | 否 | 著作权人，申请表字段生成时用于提示待确认信息。 |
+| `development_mode` | 否 | 开发方式，如独立开发、合作开发、委托开发或下达任务开发。 |
+| `software_category` | 否 | 软件分类，用于申请表和手册口径。 |
+| `hardware_environment` | 否 | 硬件环境。 |
+| `runtime_environment` | 否 | 运行环境或支撑软件。 |
+| `repository_snapshot` | 否 | 分支、tag、commit 或打包日期，用于代码材料可追溯。 |
+| `mobile_project_dir` | 否 | 移动端代码位置。 |
+| `mini_program_project_dir` | 否 | 小程序代码位置。 |
+| `desktop_project_dir` | 否 | 桌面端代码位置。 |
+| `business_modules` | 否 | 本次申报范围内的业务模块。 |
+| `user_roles` | 否 | 手册中的主要用户角色。 |
+| `core_workflows` | 否 | 需要写入用户手册的核心操作流程。 |
+| `source_material_strategy` | 否 | 源码材料策略，如自动建议、用户指定、前后端混合等。 |
+| `page_rule` | 否 | 源码和文档页数口径。 |
+| `screenshot_pages` | 否 | 需要截图的页面或流程。 |
+| `template_mode` | 否 | 模板模式，如用户模板、默认模板或只生成 Markdown。 |
+| `output_formats` | 否 | 期望输出格式。 |
+| `cleanup_check_terms` | 否 | 正式资料清理检查词。 |
 | `analysis` | 否 | 已存在的 `analysis/project.json` 路径；不填时使用 `workdir/analysis/project.json`。 |
 | `model_context` | business 阶段可选 | 模型填写后的业务理解 JSON，用于生成 `业务理解.md/json`。缺失时阶段会返回 `requires_user_input=true`。 |
 | `business_context` | draft 阶段可选 | 已确认的 `业务理解.json` 路径；不填时使用 `workdir/草稿/业务理解.json`。 |
