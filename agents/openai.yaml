@@ -1,0 +1,4 @@
+interface:
+  display_name: "软著生成器"
+  short_description: "从真实项目生成和复核软著申请三件套"
+  default_prompt: "读取当前目录中的项目，生成软件著作权申请资料草稿，经确认后输出信息采集表、用户手册和源代码材料。"
