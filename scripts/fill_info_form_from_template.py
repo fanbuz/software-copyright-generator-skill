@@ -125,6 +125,28 @@ def fill_form(template: Path, output: Path, fields: dict[str, Any], row_map: dic
     doc.save(str(output))
 
 
+def structure_report(doc: Document, fields: dict[str, Any], leaks: list[str], output: Path) -> dict[str, Any]:
+    table_shapes = []
+    for table in doc.tables:
+        row_count = len(table.rows)
+        first_row_cols = len(table.rows[0].cells) if table.rows else 0
+        table_shapes.append({"rows": row_count, "cols_first_row": first_row_cols})
+    return {
+        "output": str(output),
+        "paragraphs": len(doc.paragraphs),
+        "tables": len(doc.tables),
+        "table_shapes": table_shapes,
+        "rows": len(doc.tables[0].rows) if doc.tables else 0,
+        "images": sum(1 for r in doc.part.rels.values() if "image" in r.reltype),
+        "blank_preserved_fields": [
+            key
+            for key in ("completed_date", "first_publish_date", "first_publish_city")
+            if key in fields and str(fields.get(key) or "") == ""
+        ],
+        "forbidden_leaks": leaks,
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--template", required=True, type=Path)
@@ -142,20 +164,7 @@ def main() -> None:
     text = "\n".join(c.text for t in doc.tables for r in t.rows for c in r.cells)
     old_names = fields.get("forbidden_terms", [])
     leaks = [term for term in old_names if term and re.search(re.escape(str(term)), text)]
-    print(
-        json.dumps(
-            {
-                "output": str(args.output),
-                "paragraphs": len(doc.paragraphs),
-                "tables": len(doc.tables),
-                "rows": len(doc.tables[0].rows) if doc.tables else 0,
-                "images": sum(1 for r in doc.part.rels.values() if "image" in r.reltype),
-                "forbidden_leaks": leaks,
-            },
-            ensure_ascii=False,
-            indent=2,
-        )
-    )
+    print(json.dumps(structure_report(doc, fields, leaks, args.output), ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":

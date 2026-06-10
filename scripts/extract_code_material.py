@@ -80,6 +80,19 @@ def selected_line_estimate(item: dict[str, Any]) -> int:
     return total + 2 if total > 0 else 0
 
 
+def selected_range(item: dict[str, Any], source_line_count: int) -> tuple[int, int]:
+    raw_start = item.get("start_line") or item.get("selected_line_start") or 1
+    raw_end = item.get("end_line") or item.get("selected_line_end") or source_line_count
+    try:
+        start = int(raw_start)
+        end = int(raw_end)
+    except (TypeError, ValueError):
+        raise SystemExit(f"Invalid selected line range for {item.get('path')}: {raw_start}-{raw_end}")
+    if start < 1 or end < start or end > source_line_count:
+        raise SystemExit(f"Invalid selected line range for {item.get('path')}: {start}-{end}; source lines={source_line_count}")
+    return start, end
+
+
 def available_pages_from_selection(selection_path: Path | None, lines_per_page: int) -> tuple[int, int, int]:
     if selection_path is None or not selection_path.exists():
         return 0, 0, 0
@@ -126,6 +139,8 @@ def load_selected_files(project: Path, selection_path: Path | None) -> list[dict
             {
                 "path": str(path_value),
                 "selected": True,
+                "start_line": item.get("start_line") or item.get("selected_line_start"),
+                "end_line": item.get("end_line") or item.get("selected_line_end"),
             }
         )
     return selected
@@ -146,20 +161,20 @@ def collect_code_lines(project: Path, selection_path: Path | None) -> tuple[list
             continue
         text = read_text(path)
         source_lines = text.splitlines()
-        selected_lines = source_lines
+        selected_line_start, selected_line_end = selected_range(item, len(source_lines))
+        selected_lines = source_lines[selected_line_start - 1 : selected_line_end]
         start = len(all_lines) + 1
         marker = marker_for(path, project)
         all_lines.append(marker)
         all_lines.extend(selected_lines)
         all_lines.append("")
         end = len(all_lines)
-        source_end_line = len(source_lines)
         manifest_files.append(
             {
                 "path": rel(path, project),
                 "source_line_count": len(source_lines),
-                "selected_line_start": 1,
-                "selected_line_end": source_end_line,
+                "selected_line_start": selected_line_start,
+                "selected_line_end": selected_line_end,
                 "selected_line_count": len(selected_lines),
                 "material_line_start": start,
                 "material_line_end": end,

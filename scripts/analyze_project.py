@@ -9,7 +9,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-from common import COPYRIGHT_CODE_EXTS, FRONTEND_EXTS, count_text_lines, is_known_config_file, iter_project_files, normalize_title, read_json, read_text, rel, write_json
+from common import COPYRIGHT_CODE_EXTS, EXCLUDE_DIRS, FRONTEND_EXTS, count_text_lines, is_known_config_file, iter_project_files, normalize_title, read_json, read_text, rel, write_json
 
 
 DEPENDENCY_FRAMEWORKS = {
@@ -180,6 +180,7 @@ def analyze(project: Path) -> dict[str, Any]:
     route_paths = sorted(set(route_paths), key=lambda x: (x.count("/"), x))
 
     return {
+        "schema_version": "analysis.v1",
         "project_root": str(project),
         "project_name": project.name,
         "software_name_candidate": normalize_title(package_name or project.name),
@@ -205,6 +206,23 @@ def analyze(project: Path) -> dict[str, Any]:
         "readme_excerpt": summarize_readme(project),
         "run_command_candidates": infer_run_commands(scripts),
         "feature_candidates": infer_features(categorized, route_paths),
+        "contract": {
+            "required_for": ["business", "code-selection", "draft"],
+            "stable_fields": [
+                "schema_version",
+                "project_root",
+                "project_name",
+                "software_name_candidate",
+                "package",
+                "frameworks",
+                "language",
+                "source",
+                "routes",
+                "run_command_candidates",
+                "feature_candidates",
+            ],
+            "excluded_directories": sorted(EXCLUDE_DIRS),
+        },
     }
 
 

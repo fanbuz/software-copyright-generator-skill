@@ -51,6 +51,8 @@ def build_candidates(project: Path) -> list[dict[str, Any]]:
             {
                 "path": rel(path, project),
                 "selected": False,
+                "start_line": 1,
+                "end_line": line_count,
                 "line_count": line_count,
                 "priority": priority,
                 "selection_tier": "frontend" if path.suffix.lower() in FRONTEND_EXTS else "supplement",
@@ -84,7 +86,7 @@ def write_selection_md(path: Path, data: dict[str, Any]) -> None:
         "请先确认要抽取哪些源码文件，再运行代码材料抽取。",
         "",
         "本清单只列出候选源码证据，不默认决定抽取文件。",
-        "模型需要先理解项目业务、页面入口和源码职责，再填写 `selected/model_reason`。",
+        "模型需要先理解项目业务、页面入口和源码职责，再填写 `selected/start_line/end_line/model_reason`。",
         f"当前已选约 {data['estimated_selected_pages']} 页，全部候选源码约 {data['estimated_all_candidate_pages']} 页。",
         "",
         "```text",
@@ -96,7 +98,7 @@ def write_selection_md(path: Path, data: dict[str, Any]) -> None:
         "",
         "1. 模型根据项目业务和代码入口选择最能体现软件功能的文件。",
         "2. 把需要抽取的文件设为 `selected: true`，并填写 `model_reason`。",
-        "3. 代码材料按完整文件原样复制，不支持只抽取某个文件的中间行段。",
+        "3. 如只需文件局部内容，可填写 `start_line/end_line`，必须保持连续行段并说明理由。",
         "4. 用户确认模型选择后，再记录 `code-selection` 门禁。",
         "",
         "## 默认选中文件",
@@ -142,6 +144,7 @@ def main() -> None:
     all_pages = (candidate_lines + args.lines_per_page - 1) // args.lines_per_page if candidate_lines else 0
     data = {
         "project_root": str(project.resolve()),
+        "schema_version": "code-selection.v1",
         "selection_required": True,
         "model_selection_required": True,
         "confirmation_required": True,
