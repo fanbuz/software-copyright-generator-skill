@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from capture_screenshots import probe_service
 from common import read_json, write_json
 
 
@@ -112,6 +113,33 @@ def confirm_screenshot_method(workdir: Path, note: str, method: str) -> Path:
     return out_path
 
 
+def confirm_screenshot_ready(workdir: Path, note: str, base_url: str) -> Path:
+    """Record that the user's web service is up and reachable for browser screenshots.
+
+    自动截图仅支持浏览器可访问的 Web 端服务；门禁记录前会实际探测访问地址，
+    服务未启动时停住并提示用户先启动 Web 服务。
+    """
+    base_url = (base_url or "").strip()
+    if not base_url:
+        raise SystemExit(
+            "STOP_FOR_USER\n"
+            "NEXT_ACTION: 请通过 --base-url 提供 Web 服务访问地址（自动截图仅支持浏览器可访问的 Web 端服务）。"
+        )
+    service = probe_service(base_url)
+    if not service.get("reachable"):
+        raise SystemExit(
+            "STOP_FOR_USER\n"
+            f"NEXT_ACTION: Web 服务尚不可访问：{base_url}。请先在项目目录启动 Web 服务"
+            "（如 npm run dev、python manage.py runserver），确认浏览器能打开该地址后重新执行本命令。"
+        )
+    out_path = workdir / "截图服务确认.json"
+    data = load_json_or_empty(out_path)
+    data["base_url"] = base_url
+    data["service_detail"] = service
+    write_confirmation(out_path, data, "screenshot_service_ready", note)
+    return out_path
+
+
 def confirm_application_fields(workdir: Path, note: str) -> Path:
     pending = pending_application_fields(workdir / "草稿/申请表信息.md")
     if pending:
@@ -171,6 +199,7 @@ def main() -> None:
             "business",
             "code-selection",
             "screenshot-method",
+            "screenshot-ready",
             "application-fields",
             "markdown",
         ],
@@ -180,6 +209,10 @@ def main() -> None:
         "--method",
         choices=["chrome-devtools", "computer-use", "user-supplied", "skip"],
         help="Screenshot capture method when --stage screenshot-method",
+    )
+    parser.add_argument(
+        "--base-url",
+        help="Web service URL when --stage screenshot-ready (browser screenshots support web services only)",
     )
     args = parser.parse_args()
 
@@ -196,6 +229,8 @@ def main() -> None:
         path = confirm_code_selection(workdir, args.note)
     elif args.stage == "screenshot-method":
         path = confirm_screenshot_method(workdir, args.note, args.method or "")
+    elif args.stage == "screenshot-ready":
+        path = confirm_screenshot_ready(workdir, args.note, args.base_url or "")
     elif args.stage == "application-fields":
         path = confirm_application_fields(workdir, args.note)
     else:

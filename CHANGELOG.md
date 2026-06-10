@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- 增加截图就绪交互点：`capture_screenshots.py --check-only` 探测 Web 服务可达性与 Playwright 可用性，服务未启动时提示用户先启动 Web 服务。
+- `confirm_stage.py` 新增 `screenshot-ready` 门禁，实际探测访问地址可达后才记录确认。
+- `run_stage.py` 的 `screenshots` 阶段支持浏览器自动截图：服务不可达时写入 `截图/截图就绪检查.json` 并返回 `requires_user_input=true`；同时支持 `skip` 方式直接返回预留说明。
+- README、SKILL 与规则文档明确浏览器自动截图目前仅支持 Web 端服务，移动端、小程序、桌面端截图由用户提供。
+
 ## v0.2.0
 
 在 v0.1.0 基线之上，完善前置采集流程并强化正式三件套的格式与一致性：

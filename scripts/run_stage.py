@@ -13,7 +13,7 @@ from typing import Any, Callable
 
 from analyze_project import analyze
 from build_docx_from_md import build_all, confirmation_issues
-from capture_screenshots import collect_manual_screenshots
+from capture_screenshots import capture_browser_screenshots, check_readiness, collect_manual_screenshots
 from common import ensure_dir, read_json, write_json
 from extract_code_material import extract
 from generate_application_info import build_fields, require_confirmed_business, write_application_md
@@ -168,11 +168,34 @@ def stage_draft(manifest: dict[str, Any]) -> dict[str, Any]:
 
 def stage_screenshots(manifest: dict[str, Any]) -> dict[str, Any]:
     workdir = ensure_dir(require_path(manifest, "workdir"))
+    method_path = workdir / "截图方式确认.json"
+    method = ""
+    if method_path.exists():
+        method = str(read_json(method_path).get("screenshot_method") or "")
+
+    if method == "skip":
+        return {"status": "skip", "note": "用户选择暂不截图，操作手册保留截图预留位置"}
+
     manual_dir = manifest.get("manual_screenshot_dir")
-    if not manual_dir:
-        raise StageStop("manual_screenshot_dir required for user-supplied screenshots")
-    result = collect_manual_screenshots(Path(manual_dir), workdir / "截图")
-    return {"manifest": str(workdir / "截图/截图清单.json"), "status": str(result.get("status"))}
+    if manual_dir:
+        result = collect_manual_screenshots(Path(manual_dir), workdir / "截图")
+        return {"manifest": str(workdir / "截图/截图清单.json"), "status": str(result.get("status"))}
+
+    base_url = str(manifest.get("base_url") or "").strip()
+    if base_url:
+        # 浏览器自动截图仅支持 Web 端服务：先做就绪检查，服务未启动时停住等待用户。
+        readiness = check_readiness(base_url)
+        readiness_path = ensure_dir(workdir / "截图") / "截图就绪检查.json"
+        write_json(readiness_path, readiness)
+        if readiness["status"] != "ready":
+            raise StageStop(str(readiness["next_action"]), {"readiness": str(readiness_path)})
+        analysis_path = Path(manifest.get("analysis") or workdir / "analysis/project.json")
+        result = capture_browser_screenshots(base_url, analysis_path, workdir / "截图", int(manifest.get("max_pages") or 8))
+        return {"manifest": str(workdir / "截图/截图清单.json"), "status": str(result.get("status")), "readiness": str(readiness_path)}
+
+    raise StageStop(
+        "screenshots 阶段需要 manual_screenshot_dir（用户提供截图）或 base_url（浏览器自动截图，仅支持 Web 端服务）"
+    )
 
 
 def stage_build(manifest: dict[str, Any]) -> dict[str, Any]:
