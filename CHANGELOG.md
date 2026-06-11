@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## v0.3.0
+
+在 v0.2.0 基础上，增加确认模式与偏好复用机制，并完善截图就绪交互：
 
 - 增加确认模式与偏好复用：新增 `scripts/confirmation_preferences.py`，支持 interactive 逐项确认与 auto 按默认直走两种模式；auto 模式用 `--apply-defaults` 自动补齐可默认门禁，登记数据类门禁仍需用户提供。
 - 流程中的用户选择（确认模式、截图方式、服务地址等）自动保存到 `用户偏好.json`，下次运行可通过 `--show` 查看并沿用。
@@ -10,6 +12,15 @@
 - `confirm_stage.py` 新增 `screenshot-ready` 门禁，实际探测访问地址可达后才记录确认。
 - `run_stage.py` 的 `screenshots` 阶段支持浏览器自动截图：服务不可达时写入 `截图/截图就绪检查.json` 并返回 `requires_user_input=true`；同时支持 `skip` 方式直接返回预留说明。
 - README、SKILL 与规则文档明确浏览器自动截图目前仅支持 Web 端服务，移动端、小程序、桌面端截图由用户提供。
+
+验证命令：
+
+```bash
+python3 -m unittest discover -s tests
+python3 scripts/validate_skill_package.py
+```
+
+关联 issue：[#18](https://github.com/fanbuz/software-copyright-generator-skill/issues/18)、[#19](https://github.com/fanbuz/software-copyright-generator-skill/issues/19)
 
 ## v0.2.0
 
